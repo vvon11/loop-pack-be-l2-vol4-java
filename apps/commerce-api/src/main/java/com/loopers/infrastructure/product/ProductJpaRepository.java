@@ -20,7 +20,7 @@ public interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, Lo
 
     Page<ProductJpaEntity> findAllByBrandIdAndDeletedAtIsNull(Long brandId, Pageable pageable);
 
-    @Modifying(clearAutomatically = true)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE ProductJpaEntity p
         SET p.deletedAt = CURRENT_TIMESTAMP,
