@@ -235,32 +235,28 @@ class ProductApplicationServiceIntegrationTest {
     @Nested
     class Modify {
 
-        @DisplayName("이름과 가격을 갱신하지만 brandId 는 그대로 유지한다. (AC-15-2)")
+        @DisplayName("이름·가격·재고를 한 번에 갱신하지만 brandId 는 그대로 유지한다. (AC-15-2, AC-15-3)")
         @Test
-        void updatesNameAndPrice_keepsBrand() {
+        void updatesNamePriceStock_keepsBrand() {
             Product saved = productJpaRepository.save(
                     Product.create(brandAId, "원본", Money.of(1_000L), Stock.of(10)));
 
-            productApplicationService.modify(new ProductCriteria.Modify(saved.getId(), "변경", 5_000L));
+            productApplicationService.modify(new ProductCriteria.Modify(saved.getId(), "변경", 5_000L, 7));
 
             Product reloaded = productJpaRepository.findById(saved.getId()).orElseThrow();
             assertThat(reloaded.getName()).isEqualTo("변경");
             assertThat(reloaded.getPrice().getAmount()).isEqualTo(5_000L);
+            assertThat(reloaded.getStock().getQuantity()).isEqualTo(7);
             assertThat(reloaded.getBrandId()).isEqualTo(brandAId);
         }
-    }
 
-    @DisplayName("adjustStock 은 ")
-    @Nested
-    class AdjustStock {
-
-        @DisplayName("재고 수량을 지정 값으로 설정한다. (AC-15-4)")
+        @DisplayName("재고는 증감이 아니라 지정한 절대값으로 설정된다. (AC-15-4)")
         @Test
-        void setsAbsoluteQuantity() {
+        void setsStockToAbsoluteQuantity() {
             Product saved = productJpaRepository.save(
                     Product.create(brandAId, "상품1", Money.of(1_000L), Stock.of(10)));
 
-            productApplicationService.adjustStock(new ProductCriteria.AdjustStock(saved.getId(), 3));
+            productApplicationService.modify(new ProductCriteria.Modify(saved.getId(), "상품1", 1_000L, 3));
 
             assertThat(productJpaRepository.findById(saved.getId()).orElseThrow().getStock().getQuantity()).isEqualTo(3);
         }

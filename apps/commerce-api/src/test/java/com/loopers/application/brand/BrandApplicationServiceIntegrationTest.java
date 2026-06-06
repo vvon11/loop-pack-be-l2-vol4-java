@@ -1,6 +1,7 @@
 package com.loopers.application.brand;
 
 import com.loopers.domain.brand.Brand;
+import com.loopers.domain.common.PageResult;
 import com.loopers.domain.product.Money;
 import com.loopers.domain.product.Product;
 import com.loopers.domain.product.Stock;
@@ -15,8 +16,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -92,20 +91,35 @@ class BrandApplicationServiceIntegrationTest {
         }
     }
 
-    @DisplayName("getBrandList 는 ")
+    @DisplayName("getBrandPage 는 ")
     @Nested
-    class GetBrandList {
+    class GetBrandPage {
 
-        @DisplayName("등록된 브랜드를 전부 돌려준다.")
+        @DisplayName("등록된 브랜드를 페이징하여 돌려준다.")
         @Test
-        void returnsAll() {
+        void returnsPaged() {
             brandJpaRepository.save(Brand.create("브랜드A", "소개"));
             brandJpaRepository.save(Brand.create("브랜드B", "소개"));
 
-            List<BrandInfo> result = brandApplicationService.getBrandList();
+            PageResult<BrandInfo> result = brandApplicationService.getBrandPage(0, 20);
 
-            assertThat(result).hasSize(2);
-            assertThat(result).extracting(BrandInfo::name).containsExactlyInAnyOrder("브랜드A", "브랜드B");
+            assertThat(result.content()).hasSize(2);
+            assertThat(result.totalElements()).isEqualTo(2L);
+            assertThat(result.content()).extracting(BrandInfo::name).containsExactlyInAnyOrder("브랜드A", "브랜드B");
+        }
+
+        @DisplayName("페이지 사이즈에 맞춰 잘리고 hasNext 와 totalElements 를 노출한다.")
+        @Test
+        void paginates() {
+            for (int i = 0; i < 5; i++) {
+                brandJpaRepository.save(Brand.create("브랜드" + i, "소개"));
+            }
+
+            PageResult<BrandInfo> result = brandApplicationService.getBrandPage(0, 2);
+
+            assertThat(result.content()).hasSize(2);
+            assertThat(result.hasNext()).isTrue();
+            assertThat(result.totalElements()).isEqualTo(5L);
         }
 
         @DisplayName("논리 삭제된 브랜드는 제외한다.")
@@ -115,10 +129,10 @@ class BrandApplicationServiceIntegrationTest {
             brandJpaRepository.save(Brand.create("브랜드B", "소개"));
             brandApplicationService.delete(a.getId());
 
-            List<BrandInfo> result = brandApplicationService.getBrandList();
+            PageResult<BrandInfo> result = brandApplicationService.getBrandPage(0, 20);
 
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).name()).isEqualTo("브랜드B");
+            assertThat(result.content()).hasSize(1);
+            assertThat(result.content().get(0).name()).isEqualTo("브랜드B");
         }
     }
 

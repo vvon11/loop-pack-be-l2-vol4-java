@@ -2,14 +2,13 @@ package com.loopers.application.brand;
 
 import com.loopers.domain.brand.Brand;
 import com.loopers.domain.brand.BrandRepository;
+import com.loopers.domain.common.PageResult;
 import com.loopers.domain.product.ProductRepository;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @RequiredArgsConstructor
 @Component
@@ -33,10 +32,8 @@ public class BrandApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public List<BrandInfo> getBrandList() {
-        return brandRepository.findAll().stream()
-                .map(BrandInfo::from)
-                .toList();
+    public PageResult<BrandInfo> getBrandPage(int page, int size) {
+        return brandRepository.findAll(page, size).map(BrandInfo::from);
     }
 
     @Transactional

@@ -90,13 +90,7 @@ public class ProductApplicationService {
     public void modify(ProductCriteria.Modify command) {
         Product product = findOrThrow(command.id());
         product.modify(command.name(), Money.of(command.price()));
-        productRepository.update(product);
-    }
-
-    @Transactional
-    public void adjustStock(ProductCriteria.AdjustStock command) {
-        Product product = findOrThrow(command.id());
-        product.adjustStock(command.newQuantity());
+        product.adjustStock(command.stock());
         productRepository.update(product);
     }
 
