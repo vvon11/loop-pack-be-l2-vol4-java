@@ -15,11 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1/products")
-public class ProductV1Controller {
+public class ProductV1Controller implements ProductV1ApiSpec {
 
     private final ProductApplicationService productApplicationService;
 
     @GetMapping
+    @Override
     public ApiResponse<ProductV1Dto.PageResponse> getProducts(
             @RequestParam(value = "brandId", required = false) Long brandId,
             @RequestParam(value = "sort", defaultValue = "latest") String sort,
@@ -32,6 +33,7 @@ public class ProductV1Controller {
     }
 
     @GetMapping("/{productId}")
+    @Override
     public ApiResponse<ProductV1Dto.DetailResponse> getProduct(
             @PathVariable("productId") Long productId
     ) {

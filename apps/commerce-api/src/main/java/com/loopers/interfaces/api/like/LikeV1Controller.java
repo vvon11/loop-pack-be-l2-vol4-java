@@ -17,11 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RequiredArgsConstructor
 @RestController
-public class LikeV1Controller {
+public class LikeV1Controller implements LikeV1ApiSpec {
 
     private final LikeApplicationService likeApplicationService;
 
     @PostMapping("/api/v1/products/{productId}/likes")
+    @Override
     public ApiResponse<Void> register(
             @LoginUser Long userId,
             @PathVariable("productId") Long productId
@@ -31,6 +32,7 @@ public class LikeV1Controller {
     }
 
     @DeleteMapping("/api/v1/products/{productId}/likes")
+    @Override
     public ApiResponse<Void> cancel(
             @LoginUser Long userId,
             @PathVariable("productId") Long productId
@@ -40,6 +42,7 @@ public class LikeV1Controller {
     }
 
     @GetMapping("/api/v1/users/{userId}/likes")
+    @Override
     public ApiResponse<LikeV1Dto.LikePageResponse> getMyLikes(
             @LoginUser Long loginUserId,
             @PathVariable("userId") Long userId,

@@ -20,11 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api-admin/v1/products")
-public class ProductAdminV1Controller {
+public class ProductAdminV1Controller implements ProductAdminV1ApiSpec {
 
     private final ProductApplicationService productApplicationService;
 
     @GetMapping
+    @Override
     public ApiResponse<ProductV1Dto.PageResponse> getProducts(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @RequestParam(value = "brandId", required = false) Long brandId,
@@ -38,6 +39,7 @@ public class ProductAdminV1Controller {
     }
 
     @GetMapping("/{productId}")
+    @Override
     public ApiResponse<ProductV1Dto.DetailResponse> getProduct(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("productId") Long productId
@@ -47,6 +49,7 @@ public class ProductAdminV1Controller {
     }
 
     @PostMapping
+    @Override
     public ApiResponse<ProductV1Dto.CreatedResponse> register(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @RequestBody ProductV1Dto.RegisterRequest request
@@ -57,6 +60,7 @@ public class ProductAdminV1Controller {
     }
 
     @PutMapping("/{productId}")
+    @Override
     public ApiResponse<Void> modify(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("productId") Long productId,
@@ -68,6 +72,7 @@ public class ProductAdminV1Controller {
     }
 
     @DeleteMapping("/{productId}")
+    @Override
     public ApiResponse<Void> delete(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("productId") Long productId

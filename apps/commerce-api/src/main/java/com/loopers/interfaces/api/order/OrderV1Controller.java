@@ -21,11 +21,12 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1/orders")
-public class OrderV1Controller {
+public class OrderV1Controller implements OrderV1ApiSpec {
 
     private final OrderApplicationService orderApplicationService;
 
     @PostMapping
+    @Override
     public ApiResponse<OrderV1Dto.CreatedResponse> place(
             @LoginUser Long userId,
             @RequestBody OrderV1Dto.PlaceRequest request
@@ -37,6 +38,7 @@ public class OrderV1Controller {
     }
 
     @GetMapping
+    @Override
     public ApiResponse<OrderV1Dto.PageResponse> getMyOrders(
             @LoginUser Long userId,
             @RequestParam(value = "startAt", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startAt,
@@ -51,6 +53,7 @@ public class OrderV1Controller {
     }
 
     @GetMapping("/{orderId}")
+    @Override
     public ApiResponse<OrderV1Dto.DetailResponse> getMyOrder(
             @LoginUser Long userId,
             @PathVariable("orderId") Long orderId

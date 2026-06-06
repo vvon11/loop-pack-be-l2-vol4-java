@@ -16,11 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api-admin/v1/orders")
-public class OrderAdminV1Controller {
+public class OrderAdminV1Controller implements OrderAdminV1ApiSpec {
 
     private final OrderApplicationService orderApplicationService;
 
     @GetMapping
+    @Override
     public ApiResponse<OrderV1Dto.PageResponse> getAllOrders(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @RequestParam(value = "page", defaultValue = "0") int page,
@@ -32,6 +33,7 @@ public class OrderAdminV1Controller {
     }
 
     @GetMapping("/{orderId}")
+    @Override
     public ApiResponse<OrderV1Dto.DetailResponse> getOrder(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("orderId") Long orderId

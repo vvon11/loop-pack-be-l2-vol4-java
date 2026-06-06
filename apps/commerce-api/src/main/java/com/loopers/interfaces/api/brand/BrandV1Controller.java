@@ -12,11 +12,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1/brands")
-public class BrandV1Controller {
+public class BrandV1Controller implements BrandV1ApiSpec {
 
     private final BrandApplicationService brandApplicationService;
 
     @GetMapping("/{brandId}")
+    @Override
     public ApiResponse<BrandV1Dto.BrandResponse> getBrand(
             @PathVariable("brandId") Long brandId
     ) {

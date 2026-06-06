@@ -20,11 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api-admin/v1/brands")
-public class BrandAdminV1Controller {
+public class BrandAdminV1Controller implements BrandAdminV1ApiSpec {
 
     private final BrandApplicationService brandApplicationService;
 
     @GetMapping
+    @Override
     public ApiResponse<BrandV1Dto.PageResponse> getBrands(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @RequestParam(value = "page", defaultValue = "0") int page,
@@ -35,6 +36,7 @@ public class BrandAdminV1Controller {
     }
 
     @GetMapping("/{brandId}")
+    @Override
     public ApiResponse<BrandV1Dto.BrandResponse> getBrand(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("brandId") Long brandId
@@ -44,6 +46,7 @@ public class BrandAdminV1Controller {
     }
 
     @PostMapping
+    @Override
     public ApiResponse<BrandV1Dto.BrandResponse> register(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @RequestBody BrandV1Dto.RegisterRequest request
@@ -54,6 +57,7 @@ public class BrandAdminV1Controller {
     }
 
     @PutMapping("/{brandId}")
+    @Override
     public ApiResponse<Void> modify(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("brandId") Long brandId,
@@ -65,6 +69,7 @@ public class BrandAdminV1Controller {
     }
 
     @DeleteMapping("/{brandId}")
+    @Override
     public ApiResponse<Void> delete(
             @RequestHeader("X-Loopers-Ldap") String adminLdap,
             @PathVariable("brandId") Long brandId
