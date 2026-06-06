@@ -6,10 +6,13 @@
 erDiagram
     users ||--o{ product_likes : "누른다"
     users ||--o{ orders : "주문한다"
+    users ||--o{ user_coupons : "발급받는다"
     brands ||--o{ products : "보유한다"
     products ||--o{ product_likes : "대상이 된다"
     products ||--o{ order_items : "담긴다"
     orders ||--|{ order_items : "포함한다"
+    coupon_templates ||--o{ user_coupons : "발급 원형"
+    user_coupons |o--o| orders : "사용된다"
 
     users {
         bigint id PK
@@ -53,22 +56,50 @@ erDiagram
         bigint id PK
         bigint user_id FK "NOT NULL"
         varchar(20) status "NOT NULL / CREATED"
-        bigint total_amount "NOT NULL / CHECK >= 0 / 원"
+        bigint original_amount "NOT NULL / CHECK >= 0 / 쿠폰 적용 전 / 원"
+        bigint discount_amount "NOT NULL / DEFAULT 0 / CHECK >= 0 / 할인액 / 원"
+        bigint total_amount "NOT NULL / CHECK >= 0 / 최종 = original - discount / 원"
         timestamp created_at "NOT NULL / 주문 시각"
         timestamp updated_at "NOT NULL"
     }
 
     order_items {
-        bigint id PK
-        bigint order_id FK "NOT NULL"
-        bigint product_id FK "NOT NULL"
+        bigint order_id FK "NOT NULL / @CollectionTable join"
+        bigint product_id "NOT NULL"
         varchar(200) product_name "NOT NULL / 주문 시점 스냅샷"
         bigint unit_price "NOT NULL / CHECK >= 0 / 주문 시점 스냅샷 / 원"
         int quantity "NOT NULL / CHECK > 0"
+    }
+
+    coupon_templates {
+        bigint id PK
+        varchar(100) name "NOT NULL"
+        varchar(20) discount_type "NOT NULL / FIXED | RATE"
+        bigint discount_value "NOT NULL / CHECK >= 1 / FIXED=원, RATE=%"
+        int valid_days "NOT NULL / CHECK >= 1 / 발급일 기준 유효일수"
+        timestamp deleted_at "NULL / soft delete"
         timestamp created_at "NOT NULL"
         timestamp updated_at "NOT NULL"
     }
+
+    user_coupons {
+        bigint id PK
+        bigint user_id FK "NOT NULL"
+        bigint template_id FK "NOT NULL / 발급 원형 ID 참조"
+        varchar(100) coupon_name "NOT NULL / 발급 시점 스냅샷"
+        varchar(20) discount_type "NOT NULL / 발급 시점 스냅샷"
+        bigint discount_value "NOT NULL / 발급 시점 스냅샷"
+        varchar(20) status "NOT NULL / AVAILABLE | USED"
+        timestamp expires_at "NOT NULL / 발급 시점 스냅샷 = 발급시각 + valid_days"
+        timestamp used_at "NULL / 사용 시각"
+        bigint order_id "NULL / 사용된 주문"
+        timestamp created_at "NOT NULL / 발급 시각"
+        timestamp updated_at "NOT NULL"
+    }
 ```
+
+> `order_items` 는 `Order` 애그리거트 내부의 값 컬렉션(`@ElementCollection` + `@Embeddable OrderItem`)으로 매핑된다.
+> 독립 정체성이 없는 주문 시점 스냅샷이므로 대리키(`id`)와 감사 컬럼(`created_at`/`updated_at`)을 두지 않고, `order_id` 로 소속 주문에 종속된다.
 
 ---
 
@@ -129,19 +160,63 @@ erDiagram
 | id | BIGINT | PK, IDENTITY | 대리키 |
 | user_id | BIGINT | FK→users.id, NOT NULL | 주문자 |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'CREATED', CHECK (status = 'CREATED') | 주문 상태 |
-| total_amount | BIGINT | NOT NULL, CHECK (total_amount >= 0) | 주문 총액(원) |
+| original_amount | BIGINT | NOT NULL, CHECK (original_amount >= 0) | 쿠폰 적용 전 금액(항목 소계 합, 원) |
+| discount_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (discount_amount >= 0) | 할인액(원, 쿠폰 미사용 시 0) |
+| total_amount | BIGINT | NOT NULL, CHECK (total_amount >= 0) | 최종 금액 = original − discount(원) |
 | created_at | TIMESTAMP | NOT NULL | 주문 시각 |
 | updated_at | TIMESTAMP | NOT NULL | 수정 시각 |
 
+> 금액 3종(`original_amount`/`discount_amount`/`total_amount`)은 주문 시점 스냅샷이다. 할인액은 사용한 쿠폰이 계산한 결과를 그대로 저장하며, 이후 쿠폰·상품이 바뀌어도 주문 상세는 불변이다.
+> **`orders`는 쿠폰을 참조하지 않는다** — 금액 결과만 보관하면 영수증으로 자립하므로, "어떤 쿠폰이 쓰였는지"는 `user_coupons.order_id`(쿠폰 → 주문 단방향)로만 기록한다. 사용 사실(상태·시각·주문)을 `user_coupons` 한쪽에 모아 양방향 중복을 피한다.
+
 ### 주문 항목 — `order_items`
+
+`Order` 애그리거트 내부의 값 컬렉션(`@ElementCollection` + `@Embeddable OrderItem`). 대리키·감사 컬럼 없음.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| order_id | BIGINT | FK→orders.id, NOT NULL | 소속 주문 (`@CollectionTable` join) |
+| product_id | BIGINT | NOT NULL | 참조 상품 (ID 참조 스냅샷) |
+| product_name | VARCHAR(200) | NOT NULL | 상품명 (주문 시점 스냅샷) |
+| unit_price | BIGINT | NOT NULL, CHECK (unit_price >= 0) | 단가 (주문 시점 스냅샷, 원) |
+| quantity | INTEGER | NOT NULL, CHECK (quantity > 0) | 주문 수량 |
+
+### 쿠폰 템플릿 — `coupon_templates`
+
+어드민이 정의하는 쿠폰 원형. 할인 정책(`discount_type`/`discount_value`)은 `DiscountPolicy` VO(`@Embeddable`)로 매핑된다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |------|------|------|------|
 | id | BIGINT | PK, IDENTITY | 대리키 |
-| order_id | BIGINT | FK→orders.id, NOT NULL | 소속 주문 |
-| product_id | BIGINT | FK→products.id, NOT NULL | 참조 상품 |
-| product_name | VARCHAR(200) | NOT NULL | 상품명 (주문 시점 스냅샷) |
-| unit_price | BIGINT | NOT NULL, CHECK (unit_price >= 0) | 단가 (주문 시점 스냅샷, 원) |
-| quantity | INTEGER | NOT NULL, CHECK (quantity > 0) | 주문 수량 |
+| name | VARCHAR(100) | NOT NULL | 쿠폰명 |
+| discount_type | VARCHAR(20) | NOT NULL | 할인 종류 (`FIXED` \| `RATE`) |
+| discount_value | BIGINT | NOT NULL, CHECK (discount_value >= 1) | 할인 값 (FIXED=원, RATE=%·1~100) |
+| valid_days | INTEGER | NOT NULL, CHECK (valid_days >= 1) | 발급일 기준 유효일수 |
+| deleted_at | TIMESTAMP | NULL | 삭제 시각 (논리 삭제) |
 | created_at | TIMESTAMP | NOT NULL | 생성 시각 |
 | updated_at | TIMESTAMP | NOT NULL | 수정 시각 |
+
+**제약** — 브랜드·상품과 동일하게 논리 삭제(`deleted_at IS NULL` 필터)를 따른다. 템플릿 수정·삭제는 이후 발급분에만 영향을 주고, 이미 발급된 `user_coupons` 행에는 영향이 없다(발급 시점 스냅샷).
+
+### 내 쿠폰 — `user_coupons`
+
+사용자가 발급받은 쿠폰 한 장. 발급 시점에 템플릿의 혜택·이름·만료일을 **복사(스냅샷)** 해 자립한다 — `template_id`는 ID 참조일 뿐이며, 할인 계산은 이 행의 스냅샷 컬럼만으로 가능하다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| id | BIGINT | PK, IDENTITY | 대리키 |
+| user_id | BIGINT | FK→users.id, NOT NULL | 보유자 |
+| template_id | BIGINT | FK→coupon_templates.id, NOT NULL | 발급 원형 (ID 참조) |
+| coupon_name | VARCHAR(100) | NOT NULL | 쿠폰명 (발급 시점 스냅샷) |
+| discount_type | VARCHAR(20) | NOT NULL | 할인 종류 (발급 시점 스냅샷) |
+| discount_value | BIGINT | NOT NULL | 할인 값 (발급 시점 스냅샷) |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'AVAILABLE', CHECK (status IN ('AVAILABLE','USED')) | 상태 (`EXPIRED`는 저장하지 않고 조회 시 파생) |
+| expires_at | TIMESTAMP | NOT NULL | 만료일 (발급 시점 스냅샷 = 발급시각 + valid_days) |
+| used_at | TIMESTAMP | NULL | 사용 시각 |
+| order_id | BIGINT | NULL | 사용된 주문 (ID 참조) |
+| created_at | TIMESTAMP | NOT NULL | 발급 시각 |
+| updated_at | TIMESTAMP | NOT NULL | 수정 시각 |
+
+**제약** — UNIQUE `(user_id, template_id)`: 한 사용자는 같은 템플릿의 쿠폰을 1장만 가진다(1인 1매). 이 유니크 제약이 **중복 발급의 최종 방어선**이다(애플리케이션의 존재 확인이 동시성으로 뚫려도 DB가 막는다). `status`는 `AVAILABLE`/`USED` 두 값만 저장하고, 만료(`EXPIRED`)는 "`AVAILABLE`이면서 `expires_at < now`"로 조회 시점에 파생한다. `order_id`는 ID 참조로만 두고 객체 그래프는 만들지 않는다.
+
+> **[동시성 예고]** 한 쿠폰이 동시에 두 주문에 사용되는 것을 막기 위해 `user_coupons`에 낙관적 락(`@Version`) 또는 비관적 락 적용을 Phase 5(동시성)에서 다룬다. 이 ERD에는 아직 `version` 컬럼을 두지 않는다.
