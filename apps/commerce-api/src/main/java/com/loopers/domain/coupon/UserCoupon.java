@@ -11,6 +11,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -56,6 +57,10 @@ public class UserCoupon extends BaseEntity {
 
     @Column(name = "order_id")
     private Long orderId;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     private UserCoupon(Long userId, Long templateId, String couponName,
                        DiscountPolicy discountPolicy, CouponStatus status, ZonedDateTime expiresAt) {
