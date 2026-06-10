@@ -205,7 +205,7 @@ class CouponV1ApiE2ETest {
             ParameterizedTypeReference<ApiResponse<CouponV1Dto.TemplateResponse>> type = new ParameterizedTypeReference<>() {};
             ResponseEntity<ApiResponse<CouponV1Dto.TemplateResponse>> response = testRestTemplate.exchange(
                     ADMIN, HttpMethod.POST,
-                    new HttpEntity<>(new CouponV1Dto.RegisterRequest("여름세일 10%", DiscountType.RATE, 10L, 7), adminHeader()),
+                    new HttpEntity<>(new CouponV1Dto.RegisterRequest("여름세일 10%", DiscountType.RATE, 10L, 0L, 7), adminHeader()),
                     type);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -220,7 +220,7 @@ class CouponV1ApiE2ETest {
             ParameterizedTypeReference<ApiResponse<CouponV1Dto.TemplateResponse>> type = new ParameterizedTypeReference<>() {};
             ResponseEntity<ApiResponse<CouponV1Dto.TemplateResponse>> response = testRestTemplate.exchange(
                     ADMIN, HttpMethod.POST,
-                    new HttpEntity<>(new CouponV1Dto.RegisterRequest("쿠폰", DiscountType.FIXED, 1_000L, 30), empty()),
+                    new HttpEntity<>(new CouponV1Dto.RegisterRequest("쿠폰", DiscountType.FIXED, 1_000L, 0L, 30), empty()),
                     type);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -239,7 +239,7 @@ class CouponV1ApiE2ETest {
             ParameterizedTypeReference<ApiResponse<Void>> type = new ParameterizedTypeReference<>() {};
             ResponseEntity<ApiResponse<Void>> response = testRestTemplate.exchange(
                     ADMIN + "/" + templateId, HttpMethod.PUT,
-                    new HttpEntity<>(new CouponV1Dto.ModifyRequest("변경", DiscountType.RATE, 20L, 14), adminHeader()),
+                    new HttpEntity<>(new CouponV1Dto.ModifyRequest("변경", DiscountType.RATE, 20L, 0L, 14), adminHeader()),
                     type);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -254,7 +254,7 @@ class CouponV1ApiE2ETest {
             ParameterizedTypeReference<ApiResponse<Void>> type = new ParameterizedTypeReference<>() {};
             ResponseEntity<ApiResponse<Void>> response = testRestTemplate.exchange(
                     ADMIN + "/99999", HttpMethod.PUT,
-                    new HttpEntity<>(new CouponV1Dto.ModifyRequest("변경", DiscountType.FIXED, 1_000L, 30), adminHeader()),
+                    new HttpEntity<>(new CouponV1Dto.ModifyRequest("변경", DiscountType.FIXED, 1_000L, 0L, 30), adminHeader()),
                     type);
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);

@@ -119,4 +119,41 @@ class DiscountPolicyTest {
         CoreException result = assertThrows(CoreException.class, () -> policy.calculate(null));
         assertThat(result.getErrorType()).isEqualTo(ErrorType.BAD_REQUEST);
     }
+
+    @DisplayName("최소 주문 금액(minOrderAmount) 이 있을 때, ")
+    @Nested
+    class MinOrderAmount {
+
+        @DisplayName("적용 전 금액이 최소 주문 금액 이상이면 정상적으로 할인한다.")
+        @Test
+        void discounts_whenOrderMeetsMinimum() {
+            DiscountPolicy policy = DiscountPolicy.of(DiscountType.FIXED, 1_000L, 10_000L);
+            Money discount = policy.calculate(Money.of(10_000L));
+            assertThat(discount.getAmount()).isEqualTo(1_000L);
+        }
+
+        @DisplayName("적용 전 금액이 최소 주문 금액 미만이면 BAD_REQUEST 예외가 발생한다.")
+        @Test
+        void throwsBadRequest_whenOrderBelowMinimum() {
+            DiscountPolicy policy = DiscountPolicy.of(DiscountType.FIXED, 1_000L, 10_000L);
+            CoreException result = assertThrows(CoreException.class, () -> policy.calculate(Money.of(9_999L)));
+            assertThat(result.getErrorType()).isEqualTo(ErrorType.BAD_REQUEST);
+        }
+
+        @DisplayName("최소 주문 금액이 음수면 생성 시 BAD_REQUEST 예외가 발생한다.")
+        @Test
+        void throwsBadRequest_whenMinOrderAmountIsNegative() {
+            CoreException result = assertThrows(CoreException.class,
+                    () -> DiscountPolicy.of(DiscountType.FIXED, 1_000L, -1L));
+            assertThat(result.getErrorType()).isEqualTo(ErrorType.BAD_REQUEST);
+        }
+
+        @DisplayName("최소 주문 금액 0(제한 없음) 이면 어떤 금액에도 할인한다.")
+        @Test
+        void discountsAny_whenNoMinimum() {
+            DiscountPolicy policy = DiscountPolicy.of(DiscountType.FIXED, 1_000L, 0L);
+            Money discount = policy.calculate(Money.of(1L));
+            assertThat(discount.getAmount()).isEqualTo(1L);
+        }
+    }
 }

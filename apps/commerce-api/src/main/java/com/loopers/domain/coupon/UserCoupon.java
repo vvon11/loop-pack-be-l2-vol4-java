@@ -90,7 +90,8 @@ public class UserCoupon extends BaseEntity {
         }
         DiscountPolicy snapshot = DiscountPolicy.of(
                 template.getDiscountPolicy().getType(),
-                template.getDiscountPolicy().getValue());
+                template.getDiscountPolicy().getValue(),
+                template.getDiscountPolicy().getMinOrderAmount());
         return new UserCoupon(
                 userId,
                 template.getId(),

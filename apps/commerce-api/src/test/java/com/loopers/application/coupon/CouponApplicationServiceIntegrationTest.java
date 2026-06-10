@@ -112,7 +112,7 @@ class CouponApplicationServiceIntegrationTest {
             CouponInfo.Issued issued = couponApplicationService.issue(USER_ID, template.getId());
 
             couponApplicationService.modifyTemplate(
-                    new CouponCriteria.ModifyTemplate(template.getId(), "쿠폰", DiscountType.FIXED, 5_000L, 30));
+                    new CouponCriteria.ModifyTemplate(template.getId(), "쿠폰", DiscountType.FIXED, 5_000L, 0L, 30));
 
             UserCoupon reloaded = userCouponJpaRepository.findById(issued.id()).orElseThrow();
             assertThat(reloaded.getDiscountPolicy().getValue()).isEqualTo(10_000L);
@@ -173,7 +173,7 @@ class CouponApplicationServiceIntegrationTest {
         @Test
         void persistsTemplate() {
             CouponInfo.Template result = couponApplicationService.registerTemplate(
-                    new CouponCriteria.RegisterTemplate("여름세일 10%", DiscountType.RATE, 10L, 7));
+                    new CouponCriteria.RegisterTemplate("여름세일 10%", DiscountType.RATE, 10L, 0L, 7));
 
             assertThat(result.id()).isNotNull();
             assertThat(result.name()).isEqualTo("여름세일 10%");
@@ -194,7 +194,7 @@ class CouponApplicationServiceIntegrationTest {
             CouponTemplate template = saveTemplate("쿠폰", DiscountType.FIXED, 1_000L, 30);
 
             couponApplicationService.modifyTemplate(
-                    new CouponCriteria.ModifyTemplate(template.getId(), "변경", DiscountType.RATE, 20L, 14));
+                    new CouponCriteria.ModifyTemplate(template.getId(), "변경", DiscountType.RATE, 20L, 0L, 14));
 
             CouponTemplate reloaded = couponTemplateJpaRepository.findById(template.getId()).orElseThrow();
             assertThat(reloaded.getName()).isEqualTo("변경");
@@ -208,7 +208,7 @@ class CouponApplicationServiceIntegrationTest {
         void throwsNotFound_whenMissing() {
             CoreException result = assertThrows(CoreException.class, () ->
                     couponApplicationService.modifyTemplate(
-                            new CouponCriteria.ModifyTemplate(99999L, "X", DiscountType.FIXED, 1_000L, 30)));
+                            new CouponCriteria.ModifyTemplate(99999L, "X", DiscountType.FIXED, 1_000L, 0L, 30)));
             assertThat(result.getErrorType()).isEqualTo(ErrorType.NOT_FOUND);
         }
     }

@@ -15,10 +15,12 @@ public final class CouponV1Dto {
 
     // ---------- 어드민 요청 ----------
 
-    public record RegisterRequest(String name, DiscountType discountType, long discountValue, int validDays) {
+    public record RegisterRequest(String name, DiscountType discountType, long discountValue,
+                                  long minOrderAmount, int validDays) {
     }
 
-    public record ModifyRequest(String name, DiscountType discountType, long discountValue, int validDays) {
+    public record ModifyRequest(String name, DiscountType discountType, long discountValue,
+                                long minOrderAmount, int validDays) {
     }
 
     // ---------- 어드민 응답 ----------
@@ -28,11 +30,13 @@ public final class CouponV1Dto {
             String name,
             DiscountType discountType,
             long discountValue,
+            long minOrderAmount,
             int validDays
     ) {
 
         public static TemplateResponse from(CouponInfo.Template info) {
-            return new TemplateResponse(info.id(), info.name(), info.discountType(), info.discountValue(), info.validDays());
+            return new TemplateResponse(info.id(), info.name(), info.discountType(), info.discountValue(),
+                    info.minOrderAmount(), info.validDays());
         }
     }
 
@@ -95,6 +99,7 @@ public final class CouponV1Dto {
             String couponName,
             DiscountType discountType,
             long discountValue,
+            long minOrderAmount,
             CouponStatus status,
             LocalDateTime expiresAt
     ) {
@@ -106,6 +111,7 @@ public final class CouponV1Dto {
                     info.couponName(),
                     info.discountType(),
                     info.discountValue(),
+                    info.minOrderAmount(),
                     info.status(),
                     info.expiresAt()
             );
@@ -117,6 +123,7 @@ public final class CouponV1Dto {
             String couponName,
             DiscountType discountType,
             long discountValue,
+            long minOrderAmount,
             CouponStatus status,
             LocalDateTime expiresAt
     ) {
@@ -127,6 +134,7 @@ public final class CouponV1Dto {
                     info.couponName(),
                     info.discountType(),
                     info.discountValue(),
+                    info.minOrderAmount(),
                     info.status(),
                     info.expiresAt()
             );

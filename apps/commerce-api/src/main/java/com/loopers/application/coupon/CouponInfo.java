@@ -22,6 +22,7 @@ public final class CouponInfo {
             String name,
             DiscountType discountType,
             long discountValue,
+            long minOrderAmount,
             int validDays
     ) {
 
@@ -31,6 +32,7 @@ public final class CouponInfo {
                     template.getName(),
                     template.getDiscountPolicy().getType(),
                     template.getDiscountPolicy().getValue(),
+                    template.getDiscountPolicy().getMinOrderAmount(),
                     template.getValidDays()
             );
         }
@@ -43,6 +45,7 @@ public final class CouponInfo {
             String couponName,
             DiscountType discountType,
             long discountValue,
+            long minOrderAmount,
             CouponStatus status,
             LocalDateTime expiresAt
     ) {
@@ -54,6 +57,7 @@ public final class CouponInfo {
                     coupon.getCouponName(),
                     coupon.getDiscountPolicy().getType(),
                     coupon.getDiscountPolicy().getValue(),
+                    coupon.getDiscountPolicy().getMinOrderAmount(),
                     coupon.getStatus(),
                     toLocal(coupon.getExpiresAt())
             );
@@ -66,6 +70,7 @@ public final class CouponInfo {
             String couponName,
             DiscountType discountType,
             long discountValue,
+            long minOrderAmount,
             CouponStatus status,
             LocalDateTime expiresAt
     ) {
@@ -76,6 +81,7 @@ public final class CouponInfo {
                     coupon.getCouponName(),
                     coupon.getDiscountPolicy().getType(),
                     coupon.getDiscountPolicy().getValue(),
+                    coupon.getDiscountPolicy().getMinOrderAmount(),
                     coupon.displayStatus(now),
                     toLocal(coupon.getExpiresAt())
             );

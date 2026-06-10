@@ -7,9 +7,11 @@ public final class CouponCriteria {
     private CouponCriteria() {
     }
 
-    public record RegisterTemplate(String name, DiscountType discountType, long discountValue, int validDays) {
+    public record RegisterTemplate(String name, DiscountType discountType, long discountValue,
+                                   long minOrderAmount, int validDays) {
     }
 
-    public record ModifyTemplate(Long id, String name, DiscountType discountType, long discountValue, int validDays) {
+    public record ModifyTemplate(Long id, String name, DiscountType discountType, long discountValue,
+                                 long minOrderAmount, int validDays) {
     }
 }

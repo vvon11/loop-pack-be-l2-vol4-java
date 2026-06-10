@@ -32,7 +32,8 @@ public class CouponAdminV1Controller implements CouponAdminV1ApiSpec {
     ) {
         CouponInfo.Template info = couponApplicationService.registerTemplate(
                 new CouponCriteria.RegisterTemplate(
-                        request.name(), request.discountType(), request.discountValue(), request.validDays()));
+                        request.name(), request.discountType(), request.discountValue(),
+                        request.minOrderAmount(), request.validDays()));
         return ApiResponse.success(CouponV1Dto.TemplateResponse.from(info));
     }
 
@@ -45,7 +46,8 @@ public class CouponAdminV1Controller implements CouponAdminV1ApiSpec {
     ) {
         couponApplicationService.modifyTemplate(
                 new CouponCriteria.ModifyTemplate(
-                        couponId, request.name(), request.discountType(), request.discountValue(), request.validDays()));
+                        couponId, request.name(), request.discountType(), request.discountValue(),
+                        request.minOrderAmount(), request.validDays()));
         return ApiResponse.success(null);
     }
 

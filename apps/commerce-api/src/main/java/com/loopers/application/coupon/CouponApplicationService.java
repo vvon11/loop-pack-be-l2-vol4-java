@@ -45,7 +45,7 @@ public class CouponApplicationService {
 
     @Transactional
     public CouponInfo.Template registerTemplate(CouponCriteria.RegisterTemplate command) {
-        DiscountPolicy policy = DiscountPolicy.of(command.discountType(), command.discountValue());
+        DiscountPolicy policy = DiscountPolicy.of(command.discountType(), command.discountValue(), command.minOrderAmount());
         CouponTemplate template = CouponTemplate.create(command.name(), policy, command.validDays());
         return CouponInfo.Template.from(couponTemplateRepository.save(template));
     }
@@ -54,7 +54,7 @@ public class CouponApplicationService {
     public void modifyTemplate(CouponCriteria.ModifyTemplate command) {
         CouponTemplate template = couponTemplateRepository.find(command.id())
                 .orElseThrow(() -> new CoreException(ErrorType.NOT_FOUND, "쿠폰을 찾을 수 없습니다."));
-        DiscountPolicy policy = DiscountPolicy.of(command.discountType(), command.discountValue());
+        DiscountPolicy policy = DiscountPolicy.of(command.discountType(), command.discountValue(), command.minOrderAmount());
         template.modify(command.name(), policy, command.validDays());
     }
 
