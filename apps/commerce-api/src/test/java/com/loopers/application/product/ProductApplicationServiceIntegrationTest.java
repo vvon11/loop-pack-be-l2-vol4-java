@@ -1,18 +1,18 @@
 package com.loopers.application.product;
 
+import com.loopers.application.like.LikeApplicationService;
 import com.loopers.domain.common.PageResult;
 import com.loopers.domain.brand.Brand;
 import com.loopers.domain.inventory.Inventory;
-import com.loopers.domain.like.Like;
 import com.loopers.domain.product.Money;
 import com.loopers.domain.product.Product;
 import com.loopers.infrastructure.brand.BrandJpaRepository;
 import com.loopers.infrastructure.inventory.InventoryJpaRepository;
-import com.loopers.infrastructure.like.LikeJpaRepository;
 import com.loopers.infrastructure.product.ProductJpaRepository;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
 import com.loopers.utils.DatabaseCleanUp;
+import com.loopers.utils.RedisCleanUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,10 +40,13 @@ class ProductApplicationServiceIntegrationTest {
     private InventoryJpaRepository inventoryJpaRepository;
 
     @Autowired
-    private LikeJpaRepository likeJpaRepository;
+    private LikeApplicationService likeApplicationService;
 
     @Autowired
     private DatabaseCleanUp databaseCleanUp;
+
+    @Autowired
+    private RedisCleanUp redisCleanUp;
 
     private Long brandAId;
     private Long brandBId;
@@ -57,6 +60,8 @@ class ProductApplicationServiceIntegrationTest {
     @AfterEach
     void tearDown() {
         databaseCleanUp.truncateAllTables();
+        // 캐시도 함께 비운다 — truncate 로 id 가 재사용되면 이전 테스트의 캐시가 히트해 오염되기 때문.
+        redisCleanUp.truncateAll();
     }
 
     // 상품과 재고(별도 애그리거트)를 함께 시드한다 — 조회·주문 경로가 inventory 를 요구하므로.
@@ -106,8 +111,8 @@ class ProductApplicationServiceIntegrationTest {
         @Test
         void returnsDetail_withBrandAndLikeCount() {
             Product p = saveProduct(brandAId, "상품1", 1_000L, 10);
-            likeJpaRepository.save(Like.create(100L, p.getId()));
-            likeJpaRepository.save(Like.create(101L, p.getId()));
+            likeApplicationService.register(100L, p.getId());
+            likeApplicationService.register(101L, p.getId());
 
             ProductInfo.Detail result = productApplicationService.getProduct(p.getId());
 
@@ -144,7 +149,7 @@ class ProductApplicationServiceIntegrationTest {
     @Nested
     class GetAllProducts {
 
-        @DisplayName("LATEST 정렬은 최신 등록 순 (createdAt DESC, id DESC).")
+        @DisplayName("LATEST 정렬은 최신 등록 순 (id DESC — auto_increment 라 id 순 = 생성 순).")
         @Test
         void sortsByLatest() {
             Product p1 = saveProduct(brandAId, "상품1", 1_000L, 10);
@@ -177,10 +182,10 @@ class ProductApplicationServiceIntegrationTest {
         void sortsByLikesDesc() {
             Product less = saveProduct(brandAId, "덜인기", 1_000L, 10);
             Product more = saveProduct(brandAId, "인기", 1_000L, 10);
-            likeJpaRepository.save(Like.create(100L, less.getId()));
-            likeJpaRepository.save(Like.create(100L, more.getId()));
-            likeJpaRepository.save(Like.create(101L, more.getId()));
-            likeJpaRepository.save(Like.create(102L, more.getId()));
+            likeApplicationService.register(100L, less.getId());
+            likeApplicationService.register(100L, more.getId());
+            likeApplicationService.register(101L, more.getId());
+            likeApplicationService.register(102L, more.getId());
 
             PageResult<ProductInfo.ListItem> result = productApplicationService.getAllProducts(
                     new ProductCriteria.GetAll(0, 20, null, "LIKES_DESC"));
