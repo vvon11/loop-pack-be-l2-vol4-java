@@ -9,6 +9,7 @@ import com.loopers.infrastructure.inventory.InventoryJpaRepository;
 import com.loopers.infrastructure.product.ProductJpaRepository;
 import com.loopers.interfaces.api.product.ProductV1Dto;
 import com.loopers.utils.DatabaseCleanUp;
+import com.loopers.utils.RedisCleanUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ class ProductV1ApiE2ETest {
     private final ProductJpaRepository productJpaRepository;
     private final InventoryJpaRepository inventoryJpaRepository;
     private final DatabaseCleanUp databaseCleanUp;
+    private final RedisCleanUp redisCleanUp;
 
     private Long brandId;
 
@@ -46,13 +48,15 @@ class ProductV1ApiE2ETest {
             BrandJpaRepository brandJpaRepository,
             ProductJpaRepository productJpaRepository,
             InventoryJpaRepository inventoryJpaRepository,
-            DatabaseCleanUp databaseCleanUp
+            DatabaseCleanUp databaseCleanUp,
+            RedisCleanUp redisCleanUp
     ) {
         this.testRestTemplate = testRestTemplate;
         this.brandJpaRepository = brandJpaRepository;
         this.productJpaRepository = productJpaRepository;
         this.inventoryJpaRepository = inventoryJpaRepository;
         this.databaseCleanUp = databaseCleanUp;
+        this.redisCleanUp = redisCleanUp;
     }
 
     @BeforeEach
@@ -63,6 +67,8 @@ class ProductV1ApiE2ETest {
     @AfterEach
     void tearDown() {
         databaseCleanUp.truncateAllTables();
+        // 캐시도 비운다 — truncate 로 id 가 재사용되면 이전 테스트의 상세 캐시가 히트해 오염되기 때문.
+        redisCleanUp.truncateAll();
     }
 
     private static HttpHeaders adminHeader() {
