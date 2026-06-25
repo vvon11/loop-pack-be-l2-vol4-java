@@ -7,12 +7,11 @@ import com.loopers.domain.order.OrderStatus;
 import com.loopers.domain.payment.CardType;
 import com.loopers.domain.payment.Payment;
 import com.loopers.domain.payment.PaymentGateway;
+import com.loopers.domain.payment.PaymentRequestException;
 import com.loopers.domain.payment.PaymentStatus;
 import com.loopers.domain.product.Money;
 import com.loopers.infrastructure.order.OrderJpaRepository;
 import com.loopers.infrastructure.payment.PaymentJpaRepository;
-import com.loopers.support.error.CoreException;
-import com.loopers.support.error.ErrorType;
 import com.loopers.utils.DatabaseCleanUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,15 +29,17 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 결제 요청 결과 처리({@link PaymentApplicationService#pay}) — PG 실패 유형에 따른 분기 검증.
+ * 결제 요청 결과 처리({@link PaymentApplicationService#pay}) — PG 실패의 in-doubt 여부에 따른 분기 검증.
  *
- * <p>PG 호출 실패는 두 갈래로 다룬다:
+ * <p>응용은 {@link PaymentRequestException#isInDoubt()} 한 비트만 보고 가른다:
  * <ul>
- *   <li><b>in-doubt</b>({@link ErrorType#SERVICE_UNAVAILABLE}, 타임아웃/CB-open/재시도 소진): 청구 여부가 "모름"이라
- *       함부로 단정하지 않고 {@code PENDING} 을 유지한다 → 콜백/정산으로 확정.</li>
- *   <li><b>결정론적 거절</b>({@link ErrorType#BAD_REQUEST}, 4xx): 요청이 PG 에 닿았으나 청구는 일어나지 않음이 확실 →
- *       PENDING 으로 숨기지 않고 {@code FAILED} 로 확정한다(좀비 PENDING 방지, 가드가 정정 후 재시도 허용).</li>
+ *   <li><b>in-doubt</b>(read/connect 타임아웃·5xx): 청구 여부가 "모름"이라 함부로 단정하지 않고
+ *       {@code PENDING} 을 유지한다 → 콜백/정산으로 확정.</li>
+ *   <li><b>not-in-doubt</b>(4xx 거절·CB-open·연결 거부): 청구가 일어나지 않음이 확실 → PENDING 으로 숨기지 않고
+ *       {@code FAILED} 로 확정한다(좀비 PENDING 방지, 가드가 정정 후 재시도 허용).</li>
  * </ul>
+ *
+ * <p>어떤 저수준 예외가 in-doubt 인지의 분류는 어댑터 단위테스트에서 검증한다.</p>
  */
 @DisplayName("결제 요청 결과 처리 — PG 실패 유형별 분기")
 @SpringBootTest
@@ -79,10 +80,10 @@ class PaymentRequestOutcomeIntegrationTest {
         databaseCleanUp.truncateAllTables();
     }
 
-    @DisplayName("PG 가 결정론적으로 거절(4xx=BAD_REQUEST)하면 결제는 FAILED 로 확정되고 주문은 CREATED 로 남는다.")
+    @DisplayName("PG 실패가 not-in-doubt(청구 없음 확실)면 결제는 FAILED 로 확정되고 주문은 CREATED 로 남는다.")
     @Test
-    void deterministicRejection_marksFailed() {
-        pgGateway.failWith(new CoreException(ErrorType.BAD_REQUEST, "PG 가 결제 요청을 거절했습니다. (status=400)"));
+    void notInDoubtFailure_marksFailed() {
+        pgGateway.failWith(PaymentRequestException.notInDoubt("PG 가 결제 요청을 거절했습니다. (status=400)"));
 
         PaymentInfo.Requested info = paymentApplicationService.pay(new PaymentCriteria.Pay(
                 USER_ID, orderId, CardType.SAMSUNG, "1234-5678-9814-1451"));
@@ -91,14 +92,14 @@ class PaymentRequestOutcomeIntegrationTest {
         Payment saved = paymentJpaRepository.findAllByOrderId(orderId).get(0);
         assertThat(saved.getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(saved.getReason()).contains("거절");
-        assertThat(saved.getTransactionKey()).as("거절은 접수 전이라 키가 없다").isNull();
+        assertThat(saved.getTransactionKey()).as("접수 전이라 키가 없다").isNull();
         assertThat(orderJpaRepository.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.CREATED);
     }
 
-    @DisplayName("PG 가 in-doubt(SERVICE_UNAVAILABLE)면 결제는 PENDING 으로 유지된다(콜백/정산 대상).")
+    @DisplayName("PG 실패가 in-doubt(청구 여부 모름)면 결제는 PENDING 으로 유지된다(콜백/정산 대상).")
     @Test
     void inDoubtFailure_keepsPending() {
-        pgGateway.failWith(new CoreException(ErrorType.SERVICE_UNAVAILABLE, "결제 시스템이 일시적으로 응답하지 않습니다."));
+        pgGateway.failWith(PaymentRequestException.inDoubt("결제 시스템이 일시적으로 응답하지 않습니다."));
 
         PaymentInfo.Requested info = paymentApplicationService.pay(new PaymentCriteria.Pay(
                 USER_ID, orderId, CardType.SAMSUNG, "1234-5678-9814-1451"));

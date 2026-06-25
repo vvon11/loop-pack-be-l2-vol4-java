@@ -1,8 +1,10 @@
 package com.loopers.infrastructure.payment;
 
 import com.loopers.domain.payment.PaymentGateway;
+import com.loopers.domain.payment.PaymentRequestException;
 import com.loopers.support.error.CoreException;
 import com.loopers.support.error.ErrorType;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -11,9 +13,11 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.ConnectException;
 import java.util.Optional;
 
 /**
@@ -95,21 +99,48 @@ public class PgPaymentGateway implements PaymentGateway {
     }
 
     /**
-     * 결제 요청 fallback. 모든 실패·CB-open 이 여기로 수렴한다. 던진 예외는 응용 서비스가 삼켜
-     * 결제를 PENDING 으로 유지하므로(사용자에겐 정상 응답), 결과는 콜백/정산으로 확정된다.
+     * 결제 요청 fallback. 모든 실패·CB-open 이 여기로 수렴한다. 실패를 in-doubt(청구 여부 모름)와
+     * not-in-doubt(청구 없음 확실)로 갈라 {@link PaymentRequestException} 으로 표면화하면, 응용은 그 한 비트만
+     * 보고 PENDING 유지(in-doubt) / FAILED 확정(not-in-doubt)을 가른다.
      */
     @SuppressWarnings("unused")
     private Result requestFallback(Command command, Throwable t) {
-        // 결정론적 거절(4xx): 요청이 PG 에 닿았으나 청구는 일어나지 않았다(not in-doubt). SERVICE_UNAVAILABLE 로
-        // 뭉개면 응용이 PENDING 으로 숨겨 영원히 안 풀리는 좀비가 되므로, BAD_REQUEST 로 구분해 표면화한다.
+        PaymentRequestException ex = classifyRequestFailure(t);
+        if (ex.isInDoubt()) {
+            log.warn("PG 결제요청 불가(in-doubt) — PENDING 유지 대상. orderId={}, cause={}", command.orderId(), t.toString());
+        } else {
+            log.warn("PG 결제요청 실패(청구 없음 확실) — FAILED 확정 대상. orderId={}, cause={}", command.orderId(), t.toString());
+        }
+        throw ex;
+    }
+
+    /**
+     * 저수준 PG 실패를 in-doubt 여부로 분류한다(순수 함수 — 부수효과 없음, 단위테스트 대상).
+     *
+     * <p>not-in-doubt(청구가 일어날 수 없음이 확실)로 적극 식별되는 것만 FAILED 로 보낸다:
+     * <ul>
+     *   <li><b>4xx</b>({@link HttpClientErrorException}): 요청이 PG 에 닿았으나 거절됨 → 청구 없음.</li>
+     *   <li><b>CB-open</b>({@link CallNotPermittedException}): 호출 자체를 차단 → 요청이 나가지 않음.</li>
+     *   <li><b>연결 거부</b>({@link ResourceAccessException} cause {@link ConnectException}): TCP 연결 실패
+     *       → 요청이 PG 에 닿지 못함.</li>
+     * </ul>
+     *
+     * <p>나머지는 모두 in-doubt 로 보수적으로 둔다 — 특히 <b>connect/read 타임아웃</b>({@code SocketTimeoutException})은
+     * 둘 다 같은 예외 타입이라 구분이 불가하고, read 타임아웃은 요청이 닿아 청구됐을 수 있으므로(in-doubt) 함부로
+     * 실패로 단정하지 않는다. 5xx 도 일반적으로 부수효과 가능성이 있어 in-doubt 로 둔다.</p>
+     */
+    static PaymentRequestException classifyRequestFailure(Throwable t) {
         if (t instanceof HttpClientErrorException ce) {
-            log.warn("PG 결제요청 거절(4xx) — 결정론적 실패. orderId={}, status={}, cause={}",
-                    command.orderId(), ce.getStatusCode(), t.toString());
-            throw new CoreException(ErrorType.BAD_REQUEST,
+            return PaymentRequestException.notInDoubt(
                     "PG 가 결제 요청을 거절했습니다. (status=" + ce.getStatusCode().value() + ")");
         }
-        log.warn("PG 결제요청 불가(CB/실패) — PENDING 유지 대상. orderId={}, cause={}", command.orderId(), t.toString());
-        throw new CoreException(ErrorType.SERVICE_UNAVAILABLE, "결제 시스템이 일시적으로 응답하지 않습니다.");
+        if (t instanceof CallNotPermittedException) {
+            return PaymentRequestException.notInDoubt("결제 시스템 장애로 결제할 수 없습니다.");
+        }
+        if (t instanceof ResourceAccessException && t.getCause() instanceof ConnectException) {
+            return PaymentRequestException.notInDoubt("결제 시스템에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+        }
+        return PaymentRequestException.inDoubt("결제 시스템이 일시적으로 응답하지 않습니다.");
     }
 
     /**
