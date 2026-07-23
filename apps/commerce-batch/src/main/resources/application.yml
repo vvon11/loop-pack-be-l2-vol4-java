@@ -17,6 +17,13 @@ spring:
     jdbc:
       initialize-schema: never
 
+batch:
+  ranking:
+    weight:
+      view: 0.1
+      like: 0.2
+      sales: 0.7
+
 management:
   health:
     defaults:
