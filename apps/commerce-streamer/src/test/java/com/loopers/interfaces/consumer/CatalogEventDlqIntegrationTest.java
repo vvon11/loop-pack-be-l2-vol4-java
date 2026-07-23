@@ -2,6 +2,7 @@ package com.loopers.interfaces.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loopers.domain.metrics.ProductMetrics;
+import com.loopers.domain.metrics.ProductMetricsId;
 import com.loopers.infrastructure.metrics.ProductMetricsJpaRepository;
 import com.loopers.utils.DatabaseCleanUp;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -26,6 +27,7 @@ import org.springframework.kafka.support.KafkaHeaders;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +45,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 class CatalogEventDlqIntegrationTest {
+
+    // now() 대신 고정 시각을 쓴다 — 자정 근처 실행 시 occurredAt 의 KST 귀속 날짜가 갈려 폴링 조회 키가 어긋나는 것을 방지.
+    private static final ZonedDateTime OCCURRED_AT = ZonedDateTime.of(2026, 7, 20, 12, 0, 0, 0, ZoneId.of("Asia/Seoul"));
 
     @Autowired
     private ProductMetricsJpaRepository productMetricsJpaRepository;
@@ -72,7 +77,7 @@ class CatalogEventDlqIntegrationTest {
              KafkaConsumer<String, String> dltConsumer = newDltConsumer()) {
             dltConsumer.subscribe(List.of(CatalogEventConsumer.CATALOG_EVENTS + ".DLT"));
 
-            // poison: productId=null → apply() 안에서 findById(null) 로 반드시 실패한다.
+            // poison: productId=null → apply() 안에서 ProductMetricsId.of() 가 IllegalArgumentException 으로 반드시 실패한다.
             send(producer, partitionKey, poison(poisonEventId));
             // 같은 key(같은 파티션)로 뒤이어 온 정상 메시지 — DLQ 로 poison 이 비켜야 이게 처리된다.
             send(producer, partitionKey, liked(productId));
@@ -105,12 +110,12 @@ class CatalogEventDlqIntegrationTest {
     }
 
     private CatalogEventMessage poison(String eventId) {
-        // productId=null 이 poison 트리거(집계 시 findById(null) 실패).
-        return new CatalogEventMessage(eventId, CatalogEventType.PRODUCT_LIKED, null, 1L, ZonedDateTime.now());
+        // productId=null 이 poison 트리거(집계 시 ProductMetricsId.of() 가 IllegalArgumentException).
+        return new CatalogEventMessage(eventId, CatalogEventType.PRODUCT_LIKED, null, 1L, OCCURRED_AT);
     }
 
     private CatalogEventMessage liked(long productId) {
-        return new CatalogEventMessage(UUID.randomUUID().toString(), CatalogEventType.PRODUCT_LIKED, productId, 1L, ZonedDateTime.now());
+        return new CatalogEventMessage(UUID.randomUUID().toString(), CatalogEventType.PRODUCT_LIKED, productId, 1L, OCCURRED_AT);
     }
 
     private void send(Producer<String, String> producer, String key, CatalogEventMessage message) {
@@ -157,9 +162,10 @@ class CatalogEventDlqIntegrationTest {
     }
 
     private ProductMetrics awaitLikeCount(long productId, long expected) {
+        ProductMetricsId id = ProductMetricsId.of(OCCURRED_AT, productId);
         ProductMetrics metrics = null;
         for (int i = 0; i < 150; i++) {
-            metrics = productMetricsJpaRepository.findById(productId).orElse(null);
+            metrics = productMetricsJpaRepository.findById(id).orElse(null);
             if (metrics != null && metrics.getLikeCount() == expected) {
                 return metrics;
             }

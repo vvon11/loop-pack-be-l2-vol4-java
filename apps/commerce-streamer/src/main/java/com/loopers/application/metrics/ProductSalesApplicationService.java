@@ -3,6 +3,7 @@ package com.loopers.application.metrics;
 import com.loopers.domain.eventlog.EventHandled;
 import com.loopers.domain.eventlog.EventHandledId;
 import com.loopers.domain.metrics.ProductMetrics;
+import com.loopers.domain.metrics.ProductMetricsId;
 import com.loopers.infrastructure.eventlog.EventHandledJpaRepository;
 import com.loopers.infrastructure.metrics.ProductMetricsJpaRepository;
 import com.loopers.interfaces.consumer.OrderEventMessage;
@@ -33,8 +34,9 @@ public class ProductSalesApplicationService {
             return; // 이미 처리한 이벤트 — 중복 흡수
         }
 
-        ProductMetrics metrics = productMetricsJpaRepository.findById(message.productId())
-                .orElseGet(() -> ProductMetrics.of(message.productId()));
+        ProductMetricsId id = ProductMetricsId.of(message.occurredAt(), message.productId());
+        ProductMetrics metrics = productMetricsJpaRepository.findById(id)
+                .orElseGet(() -> ProductMetrics.of(id));
 
         switch (message.type()) {
             case PRODUCT_SOLD -> metrics.increaseSales(message.quantity());

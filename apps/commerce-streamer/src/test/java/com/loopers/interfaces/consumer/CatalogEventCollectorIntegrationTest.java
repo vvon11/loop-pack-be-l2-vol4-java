@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loopers.application.metrics.ProductMetricsApplicationService;
 import com.loopers.domain.eventlog.EventHandledId;
 import com.loopers.domain.metrics.ProductMetrics;
+import com.loopers.domain.metrics.ProductMetricsId;
 import com.loopers.infrastructure.eventlog.EventHandledJpaRepository;
 import com.loopers.infrastructure.metrics.ProductMetricsJpaRepository;
 import com.loopers.utils.DatabaseCleanUp;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,6 +38,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 class CatalogEventCollectorIntegrationTest {
+
+    // now() 대신 고정 시각을 쓴다 — 자정 근처 실행 시 occurredAt 의 KST 귀속 날짜가 갈려 폴링 조회 키가 어긋나는 것을 방지.
+    private static final ZonedDateTime OCCURRED_AT = ZonedDateTime.of(2026, 7, 20, 12, 0, 0, 0, ZoneId.of("Asia/Seoul"));
 
     @Autowired
     private ProductMetricsJpaRepository productMetricsJpaRepository;
@@ -125,15 +130,15 @@ class CatalogEventCollectorIntegrationTest {
     }
 
     private CatalogEventMessage liked(long productId, String eventId) {
-        return new CatalogEventMessage(eventId, CatalogEventType.PRODUCT_LIKED, productId, 1L, ZonedDateTime.now());
+        return new CatalogEventMessage(eventId, CatalogEventType.PRODUCT_LIKED, productId, 1L, OCCURRED_AT);
     }
 
     private CatalogEventMessage unliked(long productId) {
-        return new CatalogEventMessage(UUID.randomUUID().toString(), CatalogEventType.PRODUCT_UNLIKED, productId, 1L, ZonedDateTime.now());
+        return new CatalogEventMessage(UUID.randomUUID().toString(), CatalogEventType.PRODUCT_UNLIKED, productId, 1L, OCCURRED_AT);
     }
 
     private CatalogEventMessage viewed(long productId) {
-        return new CatalogEventMessage(UUID.randomUUID().toString(), CatalogEventType.PRODUCT_VIEWED, productId, null, ZonedDateTime.now());
+        return new CatalogEventMessage(UUID.randomUUID().toString(), CatalogEventType.PRODUCT_VIEWED, productId, null, OCCURRED_AT);
     }
 
     private void send(Producer<String, String> producer, CatalogEventMessage message) {
@@ -157,9 +162,10 @@ class CatalogEventCollectorIntegrationTest {
     }
 
     private ProductMetrics awaitLikeCount(long productId, long expected) {
+        ProductMetricsId id = ProductMetricsId.of(OCCURRED_AT, productId);
         ProductMetrics metrics = null;
         for (int i = 0; i < 100; i++) {
-            metrics = productMetricsJpaRepository.findById(productId).orElse(null);
+            metrics = productMetricsJpaRepository.findById(id).orElse(null);
             if (metrics != null && metrics.getLikeCount() == expected) {
                 return metrics;
             }
@@ -175,9 +181,10 @@ class CatalogEventCollectorIntegrationTest {
     }
 
     private ProductMetrics awaitViewCount(long productId, long expected) {
+        ProductMetricsId id = ProductMetricsId.of(OCCURRED_AT, productId);
         ProductMetrics metrics = null;
         for (int i = 0; i < 100; i++) {
-            metrics = productMetricsJpaRepository.findById(productId).orElse(null);
+            metrics = productMetricsJpaRepository.findById(id).orElse(null);
             if (metrics != null && metrics.getViewCount() == expected) {
                 return metrics;
             }

@@ -2,6 +2,7 @@ package com.loopers.interfaces.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loopers.domain.metrics.ProductMetrics;
+import com.loopers.domain.metrics.ProductMetricsId;
 import com.loopers.infrastructure.metrics.ProductMetricsJpaRepository;
 import com.loopers.utils.DatabaseCleanUp;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,6 +39,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 class ProductMetricsConcurrentCreateIntegrationTest {
+
+    // now() 대신 고정 시각을 쓴다 — 자정 근처 실행 시 occurredAt 의 KST 귀속 날짜가 갈려 폴링 조회 키가 어긋나는 것을 방지.
+    private static final ZonedDateTime OCCURRED_AT = ZonedDateTime.of(2026, 7, 20, 12, 0, 0, 0, ZoneId.of("Asia/Seoul"));
 
     @Autowired
     private ProductMetricsJpaRepository productMetricsJpaRepository;
@@ -63,9 +68,9 @@ class ProductMetricsConcurrentCreateIntegrationTest {
 
         try (Producer<String, String> producer = newProducer()) {
             CatalogEventMessage viewed = new CatalogEventMessage(
-                    UUID.randomUUID().toString(), CatalogEventType.PRODUCT_VIEWED, productId, null, ZonedDateTime.now());
+                    UUID.randomUUID().toString(), CatalogEventType.PRODUCT_VIEWED, productId, null, OCCURRED_AT);
             OrderEventMessage sold = new OrderEventMessage(
-                    UUID.randomUUID().toString(), OrderEventType.PRODUCT_SOLD, productId, 1, 700L, 1L, ZonedDateTime.now());
+                    UUID.randomUUID().toString(), OrderEventType.PRODUCT_SOLD, productId, 1, 700L, 1L, OCCURRED_AT);
 
             // 두 토픽에 거의 동시에 발행 → 서로 다른 collector 스레드가 같은 신규 행을 동시에 만들려 경쟁한다.
             send(producer, CatalogEventConsumer.CATALOG_EVENTS, key, viewed);
@@ -96,9 +101,10 @@ class ProductMetricsConcurrentCreateIntegrationTest {
     }
 
     private ProductMetrics awaitBothCounters(long productId, long expectedView, long expectedSales) {
+        ProductMetricsId id = ProductMetricsId.of(OCCURRED_AT, productId);
         ProductMetrics metrics = null;
         for (int i = 0; i < 150; i++) {
-            metrics = productMetricsJpaRepository.findById(productId).orElse(null);
+            metrics = productMetricsJpaRepository.findById(id).orElse(null);
             if (metrics != null && metrics.getViewCount() == expectedView && metrics.getSalesCount() == expectedSales) {
                 return metrics;
             }

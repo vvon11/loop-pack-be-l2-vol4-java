@@ -1,8 +1,8 @@
 package com.loopers.domain.metrics;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.DynamicUpdate;
 
+import java.time.LocalDate;
 import java.time.ZonedDateTime;
 
 /**
@@ -18,9 +19,11 @@ import java.time.ZonedDateTime;
  * 동기·즉시정확)와 <b>의도적으로 중복</b>된다 — 소비처가 다르기 때문이다: likeCount 는 읽기 경로에서 즉시 정확해야 하고,
  * 이쪽은 조회수·판매량과 나란히 놓이는 분석/대시보드용 집계라 eventual 로 충분하다(CQRS read model 분리).
  *
- * <p>도메인 애그리거트가 아니라 이벤트 투영이므로 {@code product_id} 를 자연 PK 로 쓰고 BaseEntity 를 상속하지 않는다.
- * <b>동시성</b>: relay 가 key=productId 로 발행 → 같은 상품 이벤트는 항상 같은 파티션→같은 consumer 스레드로만
- * 처리된다(단일 writer). 그래서 find→증감→save(RMW)에 낙관/비관 락이 필요 없다(파티션 직렬화가 곧 동시성 보장).</p>
+ * <p>도메인 애그리거트가 아니라 이벤트 투영이므로 {@code (metric_date, product_id)} 복합키를 자연 PK 로 쓰고
+ * BaseEntity 를 상속하지 않는다. 상품별 누적 총계가 아닌 <b>일자별</b> 행이라 주간·월간 배치가 기간 범위를
+ * SUM 할 수 있다. <b>동시성</b>: relay 가 key=productId 로 발행 → 같은 상품 이벤트는 항상 같은 파티션→같은
+ * consumer 스레드로만 처리된다(단일 writer). 그래서 find→증감→save(RMW)에 낙관/비관 락이 필요 없다
+ * (파티션 직렬화가 곧 동시성 보장).</p>
  *
  * <p><b>단, 카운터마다 writer 가 다르다</b>: like/view 는 catalog-events collector 가, sales 는 order-events
  * collector 가 갱신한다 → 같은 행을 <b>서로 다른 스레드</b>가 동시에 건드릴 수 있다. 각 <i>카운터</i>는 여전히 파티션
@@ -35,9 +38,8 @@ import java.time.ZonedDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductMetrics {
 
-    @Id
-    @Column(name = "product_id", nullable = false, updatable = false)
-    private Long productId;
+    @EmbeddedId
+    private ProductMetricsId id;
 
     @Column(name = "like_count", nullable = false)
     private long likeCount;
@@ -51,23 +53,29 @@ public class ProductMetrics {
     @Column(name = "updated_at", nullable = false)
     private ZonedDateTime updatedAt;
 
-    private ProductMetrics(Long productId) {
-        this.productId = productId;
+    private ProductMetrics(ProductMetricsId id) {
+        this.id = id;
     }
 
-    public static ProductMetrics of(Long productId) {
-        return new ProductMetrics(productId);
+    public static ProductMetrics of(ProductMetricsId id) {
+        return new ProductMetrics(id);
+    }
+
+    public Long getProductId() {
+        return id.getProductId();
+    }
+
+    public LocalDate getMetricDate() {
+        return id.getMetricDate();
     }
 
     public void increaseLike() {
         this.likeCount++;
     }
 
-    /** 이벤트 순서가 어긋나 unlike 가 먼저 도달하는 극단(콜렉터 중간 합류 등)에 대비해 0 미만으로 내려가지 않게 막는다. */
+    /** 일별 순증감이라 음수가 그 날짜의 사실이다(취소가 좋아요보다 많은 날도 있을 수 있음) — 0 미만 방어를 두지 않는다. */
     public void decreaseLike() {
-        if (this.likeCount > 0) {
-            this.likeCount--;
-        }
+        this.likeCount--;
     }
 
     /** 결제 성공 1건에 담긴 특정 상품의 판매 수량만큼 누적한다(주문 라인아이템 단위). */
