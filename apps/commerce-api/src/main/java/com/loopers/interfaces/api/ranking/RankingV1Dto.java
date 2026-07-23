@@ -59,17 +59,24 @@ public final class RankingV1Dto {
             int page,
             int size,
             boolean hasNext,
-            long totalElements
+            long totalElements,
+            String period,
+            String periodStart,
+            String periodEnd
     ) {
 
-        public static PageResponse from(LocalDate date, PageResult<RankingInfo.RankedItem> result) {
+        public static PageResponse from(LocalDate date, RankingInfo.PeriodResult periodResult) {
+            PageResult<RankingInfo.RankedItem> result = periodResult.result();
             return new PageResponse(
                     date.format(DateTimeFormatter.BASIC_ISO_DATE),
                     result.content().stream().map(RankedItemResponse::from).toList(),
                     result.page(),
                     result.size(),
                     result.hasNext(),
-                    result.totalElements()
+                    result.totalElements(),
+                    periodResult.period().name(),
+                    periodResult.range().start().format(DateTimeFormatter.BASIC_ISO_DATE),
+                    periodResult.range().end().format(DateTimeFormatter.BASIC_ISO_DATE)
             );
         }
     }

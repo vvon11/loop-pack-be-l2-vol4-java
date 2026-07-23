@@ -1,14 +1,15 @@
 package com.loopers.infrastructure.ranking;
 
+import com.loopers.domain.ranking.DailyRankingRepository;
 import com.loopers.domain.ranking.ProductRank;
 import com.loopers.domain.ranking.RankedProduct;
 import com.loopers.domain.ranking.RankingKeys;
-import com.loopers.domain.ranking.RankingRepository;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -19,7 +20,7 @@ import java.util.Set;
  * replica lag 수 초는 허용 범위다(대기열이 master 를 쓰는 이유였던 "자기 쓰기 직후 읽기"가 여기엔 없다).
  */
 @Component
-public class RankingRedisRepository implements RankingRepository {
+public class RankingRedisRepository implements DailyRankingRepository {
 
     private final RedisTemplate<String, String> redisTemplate;
 
@@ -35,11 +36,15 @@ public class RankingRedisRepository implements RankingRepository {
         if (tuples == null) {
             return List.of();
         }
-        return tuples.stream()
-                .map(tuple -> new RankedProduct(
-                        Long.parseLong(String.valueOf(tuple.getValue())),
-                        tuple.getScore() == null ? 0.0 : tuple.getScore()))
-                .toList();
+        List<RankedProduct> result = new ArrayList<>();
+        long rank = start + 1;
+        for (ZSetOperations.TypedTuple<String> tuple : tuples) {
+            result.add(new RankedProduct(
+                    rank++,
+                    Long.parseLong(String.valueOf(tuple.getValue())),
+                    tuple.getScore() == null ? 0.0 : tuple.getScore()));
+        }
+        return result;
     }
 
     @Override

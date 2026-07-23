@@ -25,8 +25,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,6 +48,7 @@ class RankingV1ApiE2ETest {
     private final RedisTemplate<String, String> redisTemplate;
     private final DatabaseCleanUp databaseCleanUp;
     private final RedisCleanUp redisCleanUp;
+    private final JdbcTemplate jdbcTemplate;
 
     private Long brandId;
     private Long product1Id;
@@ -57,7 +63,8 @@ class RankingV1ApiE2ETest {
             InventoryRepository inventoryRepository,
             @Qualifier("redisTemplateMaster") RedisTemplate<String, String> redisTemplate,
             DatabaseCleanUp databaseCleanUp,
-            RedisCleanUp redisCleanUp
+            RedisCleanUp redisCleanUp,
+            JdbcTemplate jdbcTemplate
     ) {
         this.testRestTemplate = testRestTemplate;
         this.brandRepository = brandRepository;
@@ -66,6 +73,7 @@ class RankingV1ApiE2ETest {
         this.redisTemplate = redisTemplate;
         this.databaseCleanUp = databaseCleanUp;
         this.redisCleanUp = redisCleanUp;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @BeforeEach
@@ -90,6 +98,24 @@ class RankingV1ApiE2ETest {
 
     private void seed(LocalDate date, Long productId, double score) {
         redisTemplate.opsForZSet().add(RankingKeys.display(date), String.valueOf(productId), score);
+    }
+
+    // MV 는 commerce-batch 가 JDBC 로 적재하는 조회 전용 테이블이라, 시딩도 엔티티가 아닌 JdbcTemplate 직접
+    // INSERT 로 한다(batch 의 실제 적재 경로를 그대로 재현).
+    private void seedWeeklyRank(LocalDate periodStart, Long productId, long rankNo, double score) {
+        jdbcTemplate.update(
+                "INSERT INTO mv_product_rank_weekly "
+                        + "(period_start, period_end, product_id, rank_no, view_count, like_count, sales_count, score, calculated_at) "
+                        + "VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)",
+                periodStart, periodStart.plusDays(6), productId, rankNo, score, LocalDateTime.of(2026, 1, 1, 0, 0));
+    }
+
+    private void seedMonthlyRank(LocalDate periodStart, LocalDate periodEnd, Long productId, long rankNo, double score) {
+        jdbcTemplate.update(
+                "INSERT INTO mv_product_rank_monthly "
+                        + "(period_start, period_end, product_id, rank_no, view_count, like_count, sales_count, score, calculated_at) "
+                        + "VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)",
+                periodStart, periodEnd, productId, rankNo, score, LocalDateTime.of(2026, 1, 1, 0, 0));
     }
 
     @DisplayName("랭킹 페이지 조회 시 점수 내림차순으로, 상품 정보가 조립되어 반환된다")
@@ -189,6 +215,80 @@ class RankingV1ApiE2ETest {
 
         assertThat(ranked.getBody().data().rank()).isEqualTo(1L);
         assertThat(unranked.getBody().data().rank()).isNull();
+    }
+
+    @DisplayName("period=WEEKLY 요청 시 MySQL MV 에서 조회하고 응답에 period/periodStart/periodEnd 를 포함한다")
+    @Test
+    void getRankings_periodWeekly_queriesMv() {
+        LocalDate weekStart = TODAY.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        seedWeeklyRank(weekStart, product2Id, 1, 3.0);
+        seedWeeklyRank(weekStart, product3Id, 2, 2.0);
+
+        ResponseEntity<ApiResponse<RankingV1Dto.PageResponse>> response = get(RANKINGS + "?period=WEEKLY");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        RankingV1Dto.PageResponse body = response.getBody().data();
+        assertThat(body.period()).isEqualTo("WEEKLY");
+        assertThat(body.periodStart()).isEqualTo(weekStart.format(DateTimeFormatter.BASIC_ISO_DATE));
+        assertThat(body.periodEnd()).isEqualTo(weekStart.plusDays(6).format(DateTimeFormatter.BASIC_ISO_DATE));
+        assertThat(body.content()).extracting(RankingV1Dto.RankedItemResponse::productId)
+                .containsExactly(product2Id, product3Id);
+        assertThat(body.content().get(0).rank()).isEqualTo(1L);
+    }
+
+    @DisplayName("period=monthly(소문자) 요청 시 MySQL 월간 MV 에서 조회하고 응답에 period/periodStart/periodEnd 를 포함한다")
+    @Test
+    void getRankings_periodMonthlyLowercase_queriesMonthlyMv() {
+        LocalDate monthStart = TODAY.withDayOfMonth(1);
+        LocalDate monthEnd = TODAY.with(TemporalAdjusters.lastDayOfMonth());
+        seedMonthlyRank(monthStart, monthEnd, product1Id, 1, 5.0);
+
+        ResponseEntity<ApiResponse<RankingV1Dto.PageResponse>> response = get(RANKINGS + "?period=monthly");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        RankingV1Dto.PageResponse body = response.getBody().data();
+        assertThat(body.period()).isEqualTo("MONTHLY");
+        assertThat(body.periodStart()).isEqualTo(monthStart.format(DateTimeFormatter.BASIC_ISO_DATE));
+        assertThat(body.periodEnd()).isEqualTo(monthEnd.format(DateTimeFormatter.BASIC_ISO_DATE));
+        assertThat(body.content()).extracting(RankingV1Dto.RankedItemResponse::productId).containsExactly(product1Id);
+    }
+
+    @DisplayName("지원하지 않는 period 값은 400 Bad Request 를 반환한다")
+    @Test
+    void getRankings_unsupportedPeriod_returns400() {
+        ResponseEntity<ApiResponse<RankingV1Dto.PageResponse>> response = get(RANKINGS + "?period=YEARLY");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @DisplayName("주간 MV 조회에서도 삭제된 상품은 제외되고 순위 gap 이 유지된다")
+    @Test
+    void getRankings_periodWeekly_excludesDeletedProductKeepingRankGap() {
+        LocalDate weekStart = TODAY.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        seedWeeklyRank(weekStart, product1Id, 1, 3.0);
+        seedWeeklyRank(weekStart, product2Id, 2, 2.0); // 삭제 예정 — MV 에는 남는다
+        seedWeeklyRank(weekStart, product3Id, 3, 1.0);
+        Product product2 = productRepository.find(product2Id).orElseThrow();
+        product2.delete();
+        productRepository.update(product2);
+
+        ResponseEntity<ApiResponse<RankingV1Dto.PageResponse>> response = get(RANKINGS + "?period=WEEKLY");
+
+        RankingV1Dto.PageResponse body = response.getBody().data();
+        assertThat(body.content()).hasSize(2);
+        assertThat(body.content().get(0).rank()).isEqualTo(1L);
+        assertThat(body.content().get(1).productId()).isEqualTo(product3Id);
+        assertThat(body.content().get(1).rank()).isEqualTo(3L); // 2위 자리는 gap
+    }
+
+    @DisplayName("MV 가 없는 기간을 조회하면 빈 목록을 반환한다")
+    @Test
+    void getRankings_periodWeekly_missingMvReturnsEmptyContent() {
+        ResponseEntity<ApiResponse<RankingV1Dto.PageResponse>> response = get(RANKINGS + "?period=WEEKLY");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().data().content()).isEmpty();
+        assertThat(response.getBody().data().totalElements()).isZero();
     }
 
     private ResponseEntity<ApiResponse<RankingV1Dto.PageResponse>> get(String url) {

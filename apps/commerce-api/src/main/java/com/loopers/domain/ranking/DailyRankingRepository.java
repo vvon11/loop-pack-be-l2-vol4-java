@@ -6,8 +6,9 @@ import java.util.Optional;
 
 /**
  * 랭킹 display 보드 조회 포트 (Serving 구간). 읽기 전용 — 점수 생성·합성은 commerce-streamer 소관.
+ * 주간·월간은 {@link PeriodRankingRepository}(MySQL MV) 를 쓴다 — 저장 기술 차이를 분리한 포트 나눔.
  */
-public interface RankingRepository {
+public interface DailyRankingRepository {
 
     /** 점수 내림차순 페이지 조회 (ZREVRANGE). 보드가 없으면 빈 목록. */
     List<RankedProduct> page(LocalDate date, int page, int size);

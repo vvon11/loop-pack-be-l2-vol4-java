@@ -3,7 +3,7 @@ package com.loopers.infrastructure.ranking;
 import com.loopers.domain.ranking.ProductRank;
 import com.loopers.domain.ranking.RankedProduct;
 import com.loopers.domain.ranking.RankingKeys;
-import com.loopers.domain.ranking.RankingRepository;
+import com.loopers.domain.ranking.DailyRankingRepository;
 import com.loopers.utils.RedisCleanUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,7 +27,7 @@ class RankingRedisRepositoryIntegrationTest {
     private static final LocalDate DATE = LocalDate.of(2026, 7, 16);
 
     @Autowired
-    private RankingRepository rankingRepository;
+    private DailyRankingRepository rankingRepository;
 
     // 시드는 master 로 넣는다(읽기 대상 데이터 준비). 조회 대상 어댑터는 기본(replica-preferred) 템플릿이지만
     // 테스트 컨테이너는 단일 노드라 같은 곳을 본다.
@@ -61,11 +61,12 @@ class RankingRedisRepositoryIntegrationTest {
             List<RankedProduct> result = rankingRepository.page(DATE, 0, 10);
 
             assertThat(result).extracting(RankedProduct::productId).containsExactly(2L, 3L, 1L);
+            assertThat(result).extracting(RankedProduct::rank).containsExactly(1L, 2L, 3L);
             assertThat(result.get(0).score()).isEqualTo(3.0);
         }
 
         @Test
-        @DisplayName("page/size 로 구간을 자른다 — 2페이지는 offset 이후 항목")
+        @DisplayName("page/size 로 구간을 자른다 — 2페이지는 offset 이후 항목이고 rank 는 offset 을 이어받는다")
         void paginates() {
             seed(1L, 4.0);
             seed(2L, 3.0);
@@ -75,6 +76,7 @@ class RankingRedisRepositoryIntegrationTest {
             List<RankedProduct> secondPage = rankingRepository.page(DATE, 1, 2);
 
             assertThat(secondPage).extracting(RankedProduct::productId).containsExactly(3L, 4L);
+            assertThat(secondPage).extracting(RankedProduct::rank).containsExactly(3L, 4L);
         }
 
         @Test
